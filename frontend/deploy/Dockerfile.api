@@ -1,0 +1,26 @@
+# API демо-стенда: mock/server.mjs + настоящий поиск (demo-api/) — эмбеддинги
+# multilingual-e5 на CPU и анализ через GigaChat. Корпус монтируется томом.
+FROM node:24-bookworm-slim
+WORKDIR /srv
+ENV NODE_ENV=production
+LABEL org.legalsearch.demo="1"
+
+COPY demo-api/package.json demo-api/package-lock.json ./demo-api/
+# ONNX Runtime: только CPU. Без флага на linux/x64 скачиваются ещё ~300 МБ CUDA/TensorRT,
+# которые на сервере без GPU не нужны; бинарники других ОС тоже убираем.
+ENV ONNXRUNTIME_NODE_INSTALL=skip
+RUN cd demo-api \
+ && npm ci --omit=dev --no-audit --no-fund \
+ && rm -rf node_modules/onnxruntime-node/bin/*/darwin node_modules/onnxruntime-node/bin/*/win32 \
+ && rm -f node_modules/onnxruntime-node/bin/*/linux/*/libonnxruntime_providers_cuda.so \
+          node_modules/onnxruntime-node/bin/*/linux/*/libonnxruntime_providers_tensorrt.so \
+ && npm cache clean --force
+
+COPY demo-api/lib ./demo-api/lib
+COPY demo-api/certs ./demo-api/certs
+COPY mock ./mock
+
+# Каталоги под тома: модель с Hugging Face и кеш ответов (владелец — node)
+RUN mkdir -p /srv/models /srv/cache && chown -R node:node /srv/models /srv/cache
+USER node
+CMD ["node", "/srv/mock/server.mjs"]

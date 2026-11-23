@@ -1,0 +1,40 @@
+# Демо-стенд LegalSearch. {{DOMAIN}}, {{AUTH_USER}}, {{AUTH_HASH}} подставляет deploy.sh.
+{{DOMAIN}} {
+	# Доступ — по общему паролю для коллег: адрес сайта виден в публичных журналах
+	# сертификатов, а API тратит бесплатную квоту GigaChat. Хеш — bcrypt (caddy hash-password).
+	basic_auth {
+		{{AUTH_USER}} {{AUTH_HASH}}
+	}
+
+	header {
+		# Демо не для поисковиков.
+		X-Robots-Tag "noindex, nofollow"
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Content-Security-Policy "frame-ancestors 'none'"
+		Referrer-Policy "no-referrer"
+		-Server
+		-X-Powered-By
+	}
+
+	# API (mock) — без сжатия: поток SSE должен уходить клиенту сразу, по токену.
+	handle_path /api/* {
+		request_body {
+			max_size 64KB
+		}
+		reverse_proxy legalsearch-api:8000
+	}
+
+	handle {
+		encode zstd gzip
+		reverse_proxy legalsearch-web:3000
+	}
+
+	log {
+		output file /data/logs/legalsearch.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+	}
+}

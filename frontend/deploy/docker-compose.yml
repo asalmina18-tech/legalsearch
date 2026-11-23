@@ -1,0 +1,79 @@
+# Демо-стенд LegalSearch: интерфейс + API (поиск по корпусу решений и GigaChat).
+# Порты наружу не публикуются — трафик приходит через общий reverse proxy
+# (Caddy) во внешней сети `web`, см. legalsearch.caddy. Сервер общий с другими
+# сайтами, поэтому у контейнеров ограничены память, CPU, число процессов и логи.
+name: legalsearch-demo
+
+x-logging: &logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  web:
+    build: .
+    image: legalsearch-demo:latest
+    container_name: legalsearch-web
+    restart: unless-stopped
+    working_dir: /srv/app
+    command: ["node", "server.js"]
+    environment:
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 128
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      start_interval: 3s
+      retries: 3
+    networks: [web]
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    image: legalsearch-demo-api:latest
+    container_name: legalsearch-api
+    restart: unless-stopped
+    # GIGACHAT_AUTH_KEY и CORPUS_DIR (если корпус выложен) — в .env, права 600
+    env_file: .env
+    environment:
+      PORT: "8000"
+      HOST: "0.0.0.0"
+      MODELS_DIR: /srv/models
+      CACHE_FILE: /srv/cache/answers.json
+      # интерфейс и API на одном домене — CORS для чужих сайтов не нужен
+      CORS_LOCAL: "0"
+    volumes:
+      - ./corpus:/srv/corpus:ro
+      - models:/srv/models
+      - cache:/srv/cache
+    # модель e5-small + ONNX Runtime ≈ 450–500 МБ под нагрузкой
+    mem_limit: 900m
+    cpus: 1.0
+    pids_limit: 128
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8000/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      # первый запуск скачивает модель с Hugging Face
+      start_period: 120s
+      start_interval: 3s
+      retries: 3
+    networks: [web]
+
+volumes:
+  models:
+  cache:
+
+networks:
+  web:
+    external: true
+    name: web

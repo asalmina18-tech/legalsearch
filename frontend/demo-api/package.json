@@ -1,0 +1,9 @@
+{
+  "name": "legalsearch-demo-api",
+  "private": true,
+  "type": "module",
+  "description": "Демо-поиск LegalSearch: эмбеддинги multilingual-e5 + анализ GigaChat поверх корпуса решений",
+  "dependencies": {
+    "@huggingface/transformers": "4.3.2"
+  }
+}
